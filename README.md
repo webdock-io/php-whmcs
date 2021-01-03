@@ -1,2 +1,1 @@
-# php-whmcs
-Provisioning and Management Module for WHMCS
+= Whmcs Provisioning Module for WebDock 
