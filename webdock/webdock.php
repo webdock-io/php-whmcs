@@ -229,6 +229,7 @@ function webdock_AdminCustomButtonArray()
         "Reboot Server" => "reboot",
         "Start Server" => "start",
         "Stop Server" => "shutdown",
+        "Reinstall Server" => "reinstall",
     );
     return $buttonarray;
 }
@@ -238,10 +239,34 @@ function webdock_ClientAreaCustomButtonArray()
         "Reboot Server" => "reboot",
         "Start Server" => "start",
         "Stop Server" => "shutdown",
+        "Reinstall Server" => "reinstall",
     );
     return $buttonarray;
 }
+function webdock_reinstall($params) {
+    try {
+        require_once 'php-sdk-master/vendor/autoload.php';
+        $appName = $params['configoption1'];
+        $token = $params['configoption2'];
+        $client = new \Webdock\Client($token, $appName);
+        $slug = $params['customfields']['VPSslug'];
+        $image = $params['configoptions']['Image'];
+        $stopServer = $client->serverAction->reinstall($slug, $image);
+    } catch (Exception $e) {
+        // Record the error in WHMCS's module log.
+        logModuleCall(
+            'webdock',
+            __FUNCTION__,
+            $params,
+            $e->getMessage(),
+            $e->getTraceAsString()
+        );
+        return $e->getMessage();
+    }
+    $result = "success";
+    return $result;
 
+}
 function webdock_start($params)
 {
     try {
