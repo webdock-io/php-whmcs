@@ -9,8 +9,6 @@ use WHMCS\Database\Capsule;
 if (!defined("WHMCS")) {
     die("This file cannot be accessed directly");
 }
-error_reporting(E_ALL);
-ini_set('display_errors',true);
 /**
  * Define module related meta data.
  *
