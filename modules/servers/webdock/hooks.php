@@ -1,5 +1,10 @@
 <?php
-
+/**
+ * @Author: Rakesh Kumar(rakeshthakurpro0306@gmail.com)
+ * @copyright Copyright (c) whmcsninja.com
+ * @contact https://whmcsninja.com/
+ * @license https://whmcsninja.com/license/
+ */
 use WHMCS\Database\Capsule;
 
 add_hook('AdminAreaPage', 1, function ($vars) {
