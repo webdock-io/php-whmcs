@@ -1,16 +1,13 @@
 <?php
-
+/**
+ * @Author: Rakesh Kumar(rakeshthakurpro0306@gmail.com)
+ * @copyright Copyright (c) whmcsninja.com
+ * @contact https://whmcsninja.com/
+ * @license https://whmcsninja.com/license/
+ */
 /**
  * WHMCS Webdock Module
  */
-
-/**
- * Require any libraries needed for the module to function.
- * require_once __DIR__ . '/path/to/library/loader.php';
- *
- * Also, perform any initialization required by the service's library.
- */
-
 use WHMCS\Database\Capsule;
 
 if (!defined("WHMCS")) {
