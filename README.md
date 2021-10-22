@@ -4,6 +4,9 @@
 
  1.  Download and extract the source from Github or clone the repository
  2.  Upload the module folder to your WHMCS root.
+ 3. Grab an API token from your Webdock Dashboard. Find information on how to get your token here:
+ 
+https://webdock.io/en/docs/webdock-api/api-quick-start-guide
 
 **Provisioning Module Setup:**
 
@@ -24,6 +27,7 @@ https://docs.whmcs.com/Order_Form_Templates#Remove_Fields_From_Order_Form
 
 **Notes and known issues:**
 
+- Right now no information on logins or SSH users are being created when a VPS is created. So you as a reseller will need to set up a Shell User or send the default admin shell user (and others, e.g. Database, FTP etc.) for a LAMP/LEMP stack manually to the customer.
 - The Create Command should not be triggered manually if it has already been run automatically for a product, as this will just create a new VPS in Webdock with the same name. There is no functionality at the moment in this module that prevents double-provisioning.
 - The Suspend and Unsuspend actions in WMCS simply stop or restart the VPS server respectively
 - You will NOT be able to use the Terminate Module Command to automatically delete a VPS from Webdock unless contacting Webdock Support first. You will receive a 401 error when using this Command as it requires special privileges.
@@ -32,6 +36,7 @@ https://docs.whmcs.com/Order_Form_Templates#Remove_Fields_From_Order_Form
 
 **Todo:**
 
+- Ability to specify a shell username and password which will get set up automatically when a VPS server is created, so the customer has access with SSH immediately.
 - The ability to change hardware profile as a Custom Command
 - Ensure Config Options are re-generated. It does not seem they are refreshed as-is.
 
