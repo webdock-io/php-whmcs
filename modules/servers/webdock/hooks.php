@@ -12,14 +12,14 @@ add_hook('AdminAreaPage', 1, function ($vars) {
         $data = Capsule::table('tblproducts')
             ->where('id', '=', $_POST['productid'])
             ->where('servertype', '=', 'webdock')->first();
-        require_once 'php-sdk-master/vendor/autoload.php';
-        $appName = $data->configoption1;
-        $token = $data->configoption2;
+        require_once __DIR__ . '/vendor/autoload.php';
+        $appName = $data->configoption2;
+        $token = $data->configoption1;
         $client = new \Webdock\Client($token, $appName);
         $jsonData = $client->location->list()->getResponse()->toArray();
         $images = $client->image->list()->getResponse()->toArray();
         foreach ($jsonData as $key => $value) {
-            $products[$value['id']] = $value['city'] . ',' . $value['name'];
+            $products[$value['id']] = $value['city'] . ', ' . $value['name'];
         }
         webdock_generateconfigoption('Location', $_POST['productid'], $products);
         $pro = [];
@@ -126,7 +126,7 @@ add_hook('ClientAreaFooterOutput', 1, function($vars) {
             var selectprofile = "";
             var htmloption = "";
             var htmloption1 = "";
-            jQuery("[name^=configoption]").each(function(index, element) { 
+            jQuery("[name^=configoption]").each(function(index, element) {
                 var configoption = jQuery(this).prev().html();
                 if(configoption == "Profile"){
                     var configop = jQuery(this).attr("id");
@@ -155,7 +155,7 @@ add_hook('ClientAreaFooterOutput', 1, function($vars) {
                     if(this.selectedIndex == 1){
                         jQuery("#inputConfigOption"+selectprofile).html(htmloption1);
                     }
-                    
+
                 }
             });
         });

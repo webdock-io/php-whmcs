@@ -7,6 +7,8 @@
  */
 use WHMCS\Database\Capsule;
 
+require_once __DIR__ . '/vendor/autoload.php';
+
 /**
  * WHMCS Webdock Provisioning Module
  */
@@ -40,24 +42,27 @@ function webdock_ConfigOptions()
     $id = $_REQUEST['id'];
     return array(
         // a text field type allows for single line text input
-        'AppName' => array(
-            'Type' => 'text',
-            'Size' => '25',
-            'Default' => '',
-            'Description' => 'Enter AppName',
-        ),
         'Token' => array(
+            'FriendlyName' => 'API Token',
             'Type' => 'text',
             'Size' => '25',
             'Default' => '',
-            'Description' => 'Enter Token here',
-        ), "create_opt" => array(
+            'Description' => '',
+        ),
+        'AppName' => array(
+            'FriendlyName' => 'Application Name',
+            'Type' => 'text',
+            'Size' => '25',
+            'Default' => '',
+            'Description' => 'Optional',
+        ),
+        "create_opt" => array(
             "FriendlyName" => "",
-            "Description" => "<a href='#' id='createoption'>Create Config Option</a><script>
+            "Description" => "<a href='#' id='createoption'>Click to (Re)Generate Config Options</a><script>
 			$(document).ready(function(){
-			 
+
 				$( '#createoption' ).click(function() {
-				
+
 						$.ajax({
 						   url: 'index.php',
 						   method: 'POST',
@@ -68,10 +73,10 @@ function webdock_ConfigOptions()
                             }
 						});
 				});
-				  
-			
+
+
 			});
-	
+
 		</script>"
         )
     );
@@ -87,14 +92,24 @@ function webdock_ConfigOptions()
  */
 function webdock_CreateAccount(array $params)
 {
-    try {
-        require_once 'php-sdk-master/vendor/autoload.php';
-        $appName = $params['configoption1'];
-        $token = $params['configoption2'];
+      try {
+        $appName = $params['configoption2'];
+        $token = $params['configoption1'];
         $client = new \Webdock\Client($token, $appName);
+        if ($params['customfields']['VPS name']) {
+          $name = $params['customfields']['VPS name'];
+        } else {
+          $name = 'whmcs-vps-' . $params['serviceid'];
+        }
+        if ($params['customfields']['VPS slug']) {
+          $slug = $params['customfields']['VPS slug'];
+        } else {
+          $slug = $name;
+        }
+
         $postdata = [
-            'name' => 'whmcs-vps-' . $params['serviceid'],
-            'slug' => 'whmcsvps' . $params['serviceid'],
+            'name' => $name,
+            'slug' => $slug,
             'locationId' => $params["configoptions"]["Location"], # get available locations: $client->location->list();
             'profileSlug' => $params["configoptions"]["Profile"],
             'imageSlug' => $params["configoptions"]["Image"],
@@ -102,7 +117,7 @@ function webdock_CreateAccount(array $params)
         $server = $client->server->create($postdata);
         $resp = $server->getResponse()->toArray();
         if (isset($resp['slug'])) {
-            $params['model']->serviceProperties->save(['VPSslug' => 'whmcs-vps-' . $params['serviceid']]);
+            $params['model']->serviceProperties->save(['VPS slug' => $resp['slug']]);
             return 'success';
         } else {
             return 'Something wrong.';
@@ -139,12 +154,11 @@ function webdock_CreateAccount(array $params)
 function webdock_SuspendAccount(array $params)
 {
     try {
-        require_once 'php-sdk-master/vendor/autoload.php';
-        $appName = $params['configoption1'];
-        $token = $params['configoption2'];
+        $appName = $params['configoption2'];
+        $token = $params['configoption1'];
         $client = new \Webdock\Client($token, $appName);
-        $slug = $params['customfields']['VPSslug'];
-        $client->serverAction->suspend($slug);
+        $slug = $params['customfields']['VPS slug'];
+        $stopServer = $client->serverAction->stop($slug);
     } catch (Exception $e) {
         // Record the error in WHMCS's module log.
         logModuleCall(
@@ -172,12 +186,11 @@ function webdock_SuspendAccount(array $params)
 function webdock_UnsuspendAccount(array $params)
 {
     try {
-        require_once 'php-sdk-master/vendor/autoload.php';
-        $appName = $params['configoption1'];
-        $token = $params['configoption2'];
+        $appName = $params['configoption2'];
+        $token = $params['configoption1'];
         $client = new \Webdock\Client($token, $appName);
-        $slug = $params['customfields']['VPSslug'];
-        $stopServer = $client->serverAction->reboot($slug);
+        $slug = $params['customfields']['VPS slug'];
+        $rebootServer = $client->serverAction->reboot($slug);
     } catch (Exception $e) {
         // Record the error in WHMCS's module log.
         logModuleCall(
@@ -205,12 +218,11 @@ function webdock_UnsuspendAccount(array $params)
 function webdock_TerminateAccount(array $params)
 {
     try {
-        require_once 'php-sdk-master/vendor/autoload.php';
-        $appName = $params['configoption1'];
-        $token = $params['configoption2'];
+        $appName = $params['configoption2'];
+        $token = $params['configoption1'];
         $client = new \Webdock\Client($token, $appName);
-        $slug = $params['customfields']['VPSslug'];
-        $deleteServer = $client->delete($slug);
+        $slug = $params['customfields']['VPS slug'];
+        $deleteServer = $client->server->delete($slug);
     } catch (Exception $e) {
         // Record the error in WHMCS's module log.
         logModuleCall(
@@ -248,11 +260,10 @@ function webdock_ClientAreaCustomButtonArray()
 }
 function webdock_reinstall($params) {
     try {
-        require_once 'php-sdk-master/vendor/autoload.php';
-        $appName = $params['configoption1'];
-        $token = $params['configoption2'];
+        $appName = $params['configoption2'];
+        $token = $params['configoption1'];
         $client = new \Webdock\Client($token, $appName);
-        $slug = $params['customfields']['VPSslug'];
+        $slug = $params['customfields']['VPS slug'];
         $image = $params['configoptions']['Image'];
         $stopServer = $client->serverAction->reinstall($slug, $image);
     } catch (Exception $e) {
@@ -273,11 +284,10 @@ function webdock_reinstall($params) {
 function webdock_start($params)
 {
     try {
-        require_once 'php-sdk-master/vendor/autoload.php';
-        $appName = $params['configoption1'];
-        $token = $params['configoption2'];
+        $appName = $params['configoption2'];
+        $token = $params['configoption1'];
         $client = new \Webdock\Client($token, $appName);
-        $slug = $params['customfields']['VPSslug'];
+        $slug = $params['customfields']['VPS slug'];
         $startServer = $client->serverAction->start($slug);
     } catch (Exception $e) {
         // Record the error in WHMCS's module log.
@@ -298,11 +308,10 @@ function webdock_reboot($params)
 {
 
     try {
-        require_once 'php-sdk-master/vendor/autoload.php';
-        $appName = $params['configoption1'];
-        $token = $params['configoption2'];
+        $appName = $params['configoption2'];
+        $token = $params['configoption1'];
         $client = new \Webdock\Client($token, $appName);
-        $slug = $params['customfields']['VPSslug'];
+        $slug = $params['customfields']['VPS slug'];
         $startServer = $client->serverAction->reboot($slug);
     } catch (Exception $e) {
         // Record the error in WHMCS's module log.
@@ -324,11 +333,10 @@ function webdock_shutdown($params)
 {
 
     try {
-        require_once 'php-sdk-master/vendor/autoload.php';
-        $appName = $params['configoption1'];
-        $token = $params['configoption2'];
+        $appName = $params['configoption2'];
+        $token = $params['configoption1'];
         $client = new \Webdock\Client($token, $appName);
-        $slug = $params['customfields']['VPSslug'];
+        $slug = $params['customfields']['VPS slug'];
         $startServer = $client->serverAction->stop($slug);
     } catch (Exception $e) {
         // Record the error in WHMCS's module log.
@@ -357,12 +365,12 @@ function webdock_shutdown($params)
  */
 function webdock_ClientArea(array $params)
 {
-    require_once 'php-sdk-master/vendor/autoload.php';
+
     try {
-        $appName = $params['configoption1'];
-        $token = $params['configoption2'];
+        $appName = $params['configoption2'];
+        $token = $params['configoption1'];
         $client = new \Webdock\Client($token, $appName);
-        $slug = $params['customfields']['VPSslug'];
+        $slug = $params['customfields']['VPS slug'];
         $server = $client->server->get($slug);
         $response = $server->getResponse()->toArray();
     } catch (Exception $e) {
@@ -382,9 +390,8 @@ function webdock_getLocation($id)
     try {
         $product = Capsule::table('tblproducts')->where('servertype', 'webdock')->where('id', $id)->first();
         if (!empty($product->configoption1)) {
-            require_once 'php-sdk-master/vendor/autoload.php';
-            $appName = $product->configoption1;
-            $token = $product->configoption2;
+            $appName = $product->configoption2;
+            $token = $product->configoption1;
             $client = new \Webdock\Client($token, $appName);
             $jsonData = $client->location->list()->getResponse()->toArray();
             // print_r($jsonData); exit();

@@ -1,8 +1,8 @@
 <h3>List of Servers</h3>
 <table class="table">
     <tr>
-        <td>Name</td>
-        <td>Date</td>
+        <td>Location / Name</td>
+        <td>Date Created</td>
         <td>IPv4</td>
         <td>Status</td>
         <td>Action</td>
@@ -15,7 +15,7 @@
         <td><?php echo $server['location'] . ' ' . $server['name']; ?></td>
         <td><?php echo $server['date']; ?></td>
         <td><?php echo $server['ipv4']; ?></td>
-        <td><?php echo $server['ipv4']; ?></td>
+        <td><?php echo $server['status']; ?></td>
         <td><a href="#" class="btn btn-primary" onclick="syncPopup('<?php echo $server['slug']; ?>');">Sync</a></td>
     </tr>
 <?php

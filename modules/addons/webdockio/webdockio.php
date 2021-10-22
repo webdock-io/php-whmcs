@@ -22,11 +22,11 @@ function webdockio_config()
 {
     return [
         // Display name for your module
-        'name' => 'Webdockio',
+        'name' => 'Webdock.io',
         // Description displayed within the admin interface
-        'description' => 'This module will use to sync the data with whmcs and webdock io .',
+        'description' => 'This module lets you connect with Webdock.io, synch existing servers to WHMCS as well as resell Webdock servers.',
         // Module author name
-        'author' => 'WhmcsNinja',
+        'author' => 'Webdock.io',
         // Default language
         'language' => 'english',
         // Version number
@@ -34,19 +34,19 @@ function webdockio_config()
         'fields' => [
             // a text field type allows for single line text input
             'AccessToken' => [
-                'FriendlyName' => 'AccessToken',
+                'FriendlyName' => 'API Token',
                 'Type' => 'text',
                 'Size' => '25',
                 'Default' => '',
-                'Description' => 'AccessToken goes here',
+                'Description' => 'Webdock API Token goes here',
             ],
             // a password field type allows for masked text input
             'AppName' => [
-                'FriendlyName' => 'AppName',
+                'FriendlyName' => 'Application Name',
                 'Type' => 'text',
                 'Size' => '25',
                 'Default' => '',
-                'Description' => 'Enter secret value here',
+                'Description' => 'Enter optional Application Name here',
             ],
         ]
     ];
@@ -89,7 +89,7 @@ function webdockio_deactivate()
  */
 function webdockio_output($vars)
 {
-    include __DIR__ . '/lib/vendor/autoload.php';
+    require_once(__DIR__ . '/../../servers/webdock/vendor/autoload.php');
     $appName = $vars['AppName'];
     $token = $vars['AccessToken'];
     $client = new \Webdock\Client($token, $appName);
@@ -131,7 +131,7 @@ function webdockio_output($vars)
                 );
                 $adminUsername = ''; // Optional for WHMCS 7.2 and later
                 $res = localAPI($command, $postData, $adminUsername);
-               
+
                 Capsule::table('tblhosting')->where('id', $res['serviceids'])->update([
                     'domainstatus' => 'Active'
                 ]);
