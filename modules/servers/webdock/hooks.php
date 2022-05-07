@@ -26,7 +26,7 @@ add_hook('AdminAreaPage', 1, function ($vars) {
         foreach ($products as $key => $vals) {
             $profiles = $client->profile->list($key)->getResponse()->toArray();
             foreach ($profiles as $val) {
-                $pro[$val['slug']] = $val['name'].'_'.$key;
+                $pro[$val->slug] = $val->name.'_'.$key;
             }
         }
         webdock_generateconfigoption('Profile', $_POST['productid'], $pro);
