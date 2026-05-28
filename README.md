@@ -1,52 +1,457 @@
-## Webdock Provisioning and Addon Modules for WHMCS
+# Webdock VPS — WHMCS Provisioning Module
 
-**Installing the Modules:**
+**Version:** 1.1  
+**Requires:** WHMCS 8.x · PHP 7.4+ · Webdock Reseller Account  
+**API:** [Webdock REST API v1](https://api.webdock.io/v1)
 
- 1.  Download and extract the source from Github or clone the repository
- 2.  Upload the module folder to your WHMCS root.
- 3. Grab an API token from your Webdock Dashboard. Find information on how to get your token here:
- 
-https://webdock.io/en/docs/webdock-api/api-quick-start-guide
+---
 
-**Provisioning Module Setup:**
+## Table of Contents
 
- 1. Go to system settings by clicking the wrench icon in the top right corner of the screen.
- 2. Click on Products/Services in the left hand menu.
- 3. Create a group if you haven't already, call it e.g. "Webdock VPS Servers" - fiill in the remaining fields as you wish.
- 4. Back on the main Products/Services screen, click Create a New Product
- 5. Select Server/VPS, Give it a product name e.g. "Super Fast affordable VPS servers!"
- 6. Select "Webdock Module" under Module
- 7. Save this and once the Product is created, go to Module Settings for the product. Here you enter your API Token and Fill in the App Name field with a name that identifies your installation. This string is just used to identify requests from your WHMCS installation in the Webdock API docs and is not required. Just choose any name here that describes your WHMCS, like "My WHMCS Provisioning Module" or similar.
- 8. Now click on the "Click to (Re)Generate Config Options" - this fetches the available values for our VPS products, such as location, images and available hardware profiles. If we change our hardware lineup or add new locations, you will need to refresh this for your WHMCS installation here. 
- 9. You can change the pricing for each configurable option, such as hardware profile under Configurable Options.
- 10. On the Custom Fields Tab you will see a field named "**VPS slug**" - This field should not be renamed or removed or it will break functionality. This is the VPS shortname as set by either Webdock automatically or by you or your client if you choose to show this field on the order form. The slug should be no more than 12 alphanumerical characters. Webdock will automatically generate a slug based on the VPS name.
- 11. If you want to be able to control the name of VPSs created with WHMCS, add a custom field called "**VPS name**". Anything entered here will become the name of the VPS and a slug will automatically be generated. If you do not provide this field, a VPS server name and slug will be generated in the format "whmcs-vps-{serviceid}"
- 12. For your customer order form, you should hide the "Configure Server" fields which WHMCS adds as a default, as the Hostname, Root Password, NS1 Prefix and NS2 Prefix are not used for Webdock VPS servers. 
+1. [Overview](#overview)
+2. [Requirements](#requirements)
+3. [Installation](#installation)
+4. [Module Configuration](#module-configuration)
+5. [Product Setup](#product-setup)
+   - [Custom Fields](#custom-fields)
+   - [Configurable Options](#configurable-options)
+   - [Module Settings Tab](#module-settings-tab)
+6. [Email Templates](#email-templates)
+7. [Automation Settings](#automation-settings)
+8. [Client Area Features](#client-area-features)
+9. [Admin Panel Functions](#admin-panel-functions)
+10. [Server Provisioning Logic](#server-provisioning-logic)
+    - [Field Resolution Priority](#field-resolution-priority)
+    - [Custom Profile Creation](#custom-profile-creation)
+    - [Image Slug Resolution](#image-slug-resolution)
+11. [Lifecycle Events](#lifecycle-events)
+12. [Troubleshooting](#troubleshooting)
+13. [Security Notes](#security-notes)
+14. [Changelog](#changelog)
 
-https://docs.whmcs.com/Order_Form_Templates#Remove_Fields_From_Order_Form
+---
 
-**Notes and known issues:**
+## Overview
 
-- Right now no information on logins or SSH users are being created when a VPS is created. So you as a reseller will need to set up a Shell User or send the default admin shell user (and others, e.g. Database, FTP etc.) for a LAMP/LEMP stack manually to the customer.
-- The Create Command should not be triggered manually if it has already been run automatically for a product, as this will just create a new VPS in Webdock with the same name. There is no functionality at the moment in this module that prevents double-provisioning.
-- The Suspend and Unsuspend actions in WMCS simply stop or restart the VPS server respectively
-- You will NOT be able to use the Terminate Module Command to automatically delete a VPS from Webdock unless contacting Webdock Support first. You will receive a 401 error when using this Command as it requires special privileges.
-- If you want to reinstall a server as an admin, you first need to select another Image and then hit "Save Changes" before issuing the Reinstall Server command.
-- You can not change location or profile for the VPS using this module. You can update the values in WHMCS but there is no way to tell Webdock about these changes.
+The **Webdock VPS** module for WHMCS automates the full lifecycle of Webdock VPS servers directly from your WHMCS billing panel.
 
-**Todo:**
+**What it does:**
 
-- Ability to specify a shell username and password which will get set up automatically when a VPS server is created, so the customer has access with SSH immediately.
-- The ability to change hardware profile as a Custom Command
-- Ensure Config Options are re-generated. It does not seem they are refreshed as-is.
+| WHMCS Event                  | Webdock Action                                  |
+| ---------------------------- | ----------------------------------------------- |
+| Order paid / Create Account  | `POST /servers` — Provision new VPS             |
+| Invoice overdue / Suspend    | `POST /servers/{slug}/actions/stop` — Power off |
+| Payment received / Unsuspend | `POST /servers/{slug}/actions/start` — Power on |
+| Cancellation / Terminate     | `DELETE /servers/{slug}` — Destroy server       |
 
-**Addon Module:** 
+**Client area capabilities (in-panel):**
 
-This module is for listing existing servers in your account at Webdock.io so you can assign these to a customer and bill them via. WHMCS.
+- Live server status (running / stopped / provisioning)
+- Start · Stop · Reboot
+- OS Reinstall with image selection dropdown
+- Snapshot management (create, restore, delete)
+- Shell user management (create, delete)
 
- 1. Go to System settings by clicking the wrench icon in the top right corner of the screen
- 2. Click on Addon modules in the left hand menu
- 3. Click on Activate for the Webdockio module
- 4. Next click on Configure and enter the API token into the API Token field
- 5. Fill in the App Name field with a name that identifies your installation. This string is just used to identify requests from your WHMCS installation in the Webdock API docs and is not required. Just choose any name here that describes your WHMCS, like "My WHMCS Control Panel" or similar.
- 6. Click Save. Now you can click on **Addons -> Webdock.io** to list all existing servers in your Webdock account and assign these to your WHMCS products or clients.
+**Admin-only capabilities:**
+
+- Reboot, Archive, Refresh server data
+- Reinstall, Snapshot list/create/restore/delete
+- Shell user list/create/delete
+- Run Certbot, Set SSH settings, Set server settings
+- Dry-run and live server profile change
+- Emergency abuse suspension
+
+---
+
+## Requirements
+
+| Requirement              | Detail                                                            |
+| ------------------------ | ----------------------------------------------------------------- |
+| WHMCS                    | 8.0 or later                                                      |
+| PHP                      | 7.4 or later (8.x recommended)                                    |
+| PHP extensions           | `curl`, `json`                                                    |
+| Webdock account          | Reseller account with API token                                   |
+| Webdock delete privilege | Must be enabled by Webdock support for `TerminateAccount` to work |
+
+---
+
+## Installation
+
+1. **Download** the module and extract the `webdock` folder.
+
+2. **Upload** the folder to your WHMCS server:
+
+   ```
+   /path/to/whmcs/modules/servers/webdock/
+   ├── webdock.php
+   └── clientarea.tpl
+   ```
+
+3. **Verify permissions** — the folder and files must be readable by the web server user (typically `www-data` or `apache`):
+
+   ```bash
+   chmod 644 modules/servers/webdock/webdock.php
+   chmod 644 modules/servers/webdock/clientarea.tpl
+   ```
+
+4. Log in to WHMCS Admin and confirm the module appears under  
+   **Setup → Products/Services → Servers → Add New Server**.
+
+---
+
+## Module Configuration
+
+### Obtain a Webdock API Token
+
+1. Log in to [webdock.io](https://webdock.io).
+2. Navigate to **Account → API Tokens**.
+3. Create a new token with reseller scope.
+4. Copy the token — it will only be shown once.
+
+### Enable Server Deletion
+
+By default, Webdock reseller tokens **cannot delete servers**. To enable `TerminateAccount`:
+
+1. Contact Webdock support and request deletion privileges for your reseller token.
+2. Until this is enabled, termination requests return `401` and the admin must delete servers manually from the Webdock dashboard.
+
+---
+
+## Product Setup
+
+### Step 1 — Create a Server Group
+
+1. **Setup → Products/Services → Servers → Add New Server**
+2. Set **Type** to `Webdock VPS` (this module).
+3. Leave hostname/IP blank — the module does not use a server connection.
+4. Save.
+
+### Step 2 — Create or Edit a Product
+
+1. **Setup → Products/Services → Products/Services → Create New Product**
+2. In the **Module Settings** tab, select `Webdock VPS` as the module.
+3. Fill in the fields described in the next section.
+
+---
+
+## Custom Fields
+
+Custom fields are defined per product under **Products/Services → {Product} → Custom Fields**.
+
+These fields are populated automatically by the module at provisioning time and are also used as the _primary_ input source when an order is placed.
+
+| Field Name                   | Type | Required | Description                                                                     |
+| ---------------------------- | ---- | -------- | ------------------------------------------------------------------------------- |
+| `VPS Slug`                   | Text | Yes      | Webdock server slug — set automatically at creation. Do not edit.               |
+| `Server Name`                | Text | No       | Human-readable server name. Falls back to service hostname then auto-generated. |
+| `Location ID`                | Text | No       | Overrides the module default. E.g. `dk`, `fi`, `us`.                            |
+| `Profile Slug`               | Text | No       | Hardware profile slug. E.g. `cloud.2`.                                          |
+| `Image Slug`                 | Text | No       | OS image slug or human name. E.g. `Ubuntu Jammy 22.04`.                         |
+| `Images`                     | Text | No       | Alias for Image Slug — accepted by resolution logic.                            |
+| `Operating System`           | Text | No       | Alias for Image Slug.                                                           |
+| `Custom Platform`            | Text | No       | `intel_vps` or `epyc_vps`. Triggers custom profile creation when set.           |
+| `CPU Threads`                | Text | No       | Required when Custom Platform is set. Integer.                                  |
+| `RAM (GB)`                   | Text | No       | Required when Custom Platform is set. Integer.                                  |
+| `Disk Space (GB)`            | Text | No       | Required when Custom Platform is set. Integer.                                  |
+| `Network Bandwidth (Gbit/s)` | Text | No       | Required when Custom Platform is set. Integer.                                  |
+| `Provisioned Server Name`    | Text | No       | Set by the module post-creation. Read-only.                                     |
+| `Provisioned Profile Slug`   | Text | No       | Set by the module post-creation. Read-only.                                     |
+| `Provisioned Image Slug`     | Text | No       | Set by the module post-creation. Read-only.                                     |
+| `Provisioned Location ID`    | Text | No       | Set by the module post-creation. Read-only.                                     |
+
+> **Visibility:** Set `VPS Slug` as **Client can view: Yes / Client can edit: No**. Provisioned fields should be admin-only.
+
+---
+
+## Configurable Options
+
+Configurable options appear on the order form and **override** custom fields and module defaults.
+
+Create a Configurable Options Group under  
+**Setup → Products/Services → Configurable Options → Create New Group**,  
+then link it to your product.
+
+| Option Name                                  | Accepted Values         | Effect                          |
+| -------------------------------------------- | ----------------------- | ------------------------------- |
+| `Location ID`                                | `dk`, `fi`, `us`, …     | Overrides default location      |
+| `Profile Slug`                               | `cloud.2`, `cloud.4`, … | Overrides default profile       |
+| `Image Slug` / `Images` / `Operating System` | Slug or human name      | Overrides default OS image      |
+| `Custom Platform` / `Platform`               | `intel_vps`, `epyc_vps` | Enables custom profile creation |
+| `CPU Threads` / `CPU` / `vCPU`               | Integer                 | Custom profile CPU threads      |
+| `RAM (GB)` / `RAM` / `Memory`                | Integer                 | Custom profile RAM              |
+| `Disk Space (GB)` / `Disk` / `Storage`       | Integer                 | Custom profile disk             |
+| `Network Bandwidth (Gbit/s)` / `Bandwidth`   | Integer                 | Custom profile network          |
+
+All option name matching is **case-insensitive** and alias-aware — the module recognises multiple common spellings for each field.
+
+---
+
+## Module Settings Tab
+
+These fields appear in the WHMCS admin under  
+**Products/Services → {Product} → Module Settings**.
+
+| Setting (configoption) | Friendly Name          | Description                                                                              |
+| ---------------------- | ---------------------- | ---------------------------------------------------------------------------------------- |
+| `configoption1`        | Webdock API Token      | Your Webdock reseller API token. Stored as password field.                               |
+| `configoption2`        | Location ID (default)  | Fallback location if none specified in custom fields or configurable options. E.g. `dk`. |
+| `configoption3`        | Profile Slug (default) | Fallback hardware profile. E.g. `cloud.2`.                                               |
+| `configoption4`        | Images (default)       | Fallback OS image slug or human-readable name. E.g. `Ubuntu Jammy 22.04`.                |
+| `configoption5`        | Abuse Notify Email     | Internal email for abuse suspension alerts (optional).                                   |
+
+**Priority order for each field:**
+
+```
+Custom Fields  →  Configurable Options  →  Module Settings  →  Built-in default
+```
+
+---
+
+## Email Templates
+
+### Webdock VPS Welcome
+
+Create a welcome email that is sent automatically after a server is provisioned.
+
+1. **Setup → Email Templates → Product/Service → Create New Email Template**
+2. Set the name exactly to: `Webdock VPS Welcome`
+3. Use these merge fields in the body:
+
+| Merge Field              | Value               |
+| ------------------------ | ------------------- |
+| `{$customvars.vps_slug}` | Webdock server slug |
+| `{$customvars.vps_ip}`   | IPv4 address        |
+| `{$customvars.vps_ipv6}` | IPv6 address        |
+| `{$customvars.vps_name}` | Server display name |
+
+**Example body:**
+
+```
+Your Webdock VPS has been provisioned!
+
+Server: {$customvars.vps_name}
+IPv4:   {$customvars.vps_ip}
+IPv6:   {$customvars.vps_ipv6}
+Slug:   {$customvars.vps_slug}
+
+You can manage your server from the client area.
+```
+
+> If the template is not found, provisioning still completes — the email step fails silently.
+
+---
+
+## Automation Settings
+
+Configure WHMCS automation to automatically suspend and terminate overdue services.
+
+1. **Setup → Automation Settings**
+2. Set **Suspension Days After Due Date** — WHMCS will call `SuspendAccount` automatically.
+3. Set **Termination Days After Suspension** — WHMCS will call `TerminateAccount` automatically.
+
+The module responds to these WHMCS lifecycle events; no cron customisation is required.
+
+---
+
+## Client Area Features
+
+When a service is **Active**, the client sees a tabbed panel with:
+
+### Overview Tab
+
+- Server name and slug
+- IPv4 and IPv6 addresses
+- Current status badge (Running / Stopped / Provisioning / etc.)
+- Power action buttons: **Start**, **Stop**, **Reboot**
+- **Reinstall** panel (Danger Zone): client selects an OS image from a dropdown and confirms twice before triggering reinstall
+
+Available OS images for reinstall:
+
+| Label                     | Slug                                     |
+| ------------------------- | ---------------------------------------- |
+| Ubuntu Noble 24.04        | `webdock-ubuntu-noble-cloud`             |
+| Ubuntu Jammy 22.04        | `webdock-ubuntu-jammy-cloud`             |
+| AlmaLinux 10              | `webdock-almalinux-10-cloud`             |
+| AlmaLinux 9               | `webdock-almalinux-9-cloud`              |
+| CentOS 10                 | `webdock-centos-10-cloud`                |
+| CentOS 9                  | `webdock-centos-9-cloud`                 |
+| Debian 13 Trixie          | `webdock-debian-trixie-cloud`            |
+| Debian 12 Bookworm        | `webdock-debian-bookworm-cloud`          |
+| Ubuntu GNOME Desktop      | `webdock-ubuntu-noble-gnome-desktop`     |
+| Ubuntu KDE Plasma Desktop | `webdock-ubuntu-noble-kdeplasma-desktop` |
+| Noble LEMP Stack          | `krellide:webdock-noble-lemp`            |
+| Noble LAMP Stack          | `krellide:webdock-noble-lamp`            |
+
+### Snapshots Tab
+
+- Displays all snapshots (manual, daily, weekly) with status badge
+- **Create Snapshot** — up to 3 manual snapshots per server
+- **Restore** — reverts server to selected snapshot (confirmation required)
+- **Delete** — removes manual snapshots (daily/weekly cannot be deleted by clients)
+
+### Shell Users Tab
+
+- Lists all shell users (username, group, shell)
+- **Create Shell User** — username validated (letters/numbers/underscore, max 32 chars); password shown once in success message and never again
+- **Delete Shell User** — confirmation required; irreversible
+
+---
+
+## Admin Panel Functions
+
+Available under **Admin → Client's Product Service** via the module action buttons:
+
+| Button                    | Action                                         | Notes                                 |
+| ------------------------- | ---------------------------------------------- | ------------------------------------- |
+| Reboot Server             | `POST /actions/reboot`                         |                                       |
+| Archive Server            | `POST /actions/suspend`                        | Webdock suspend (archive state)       |
+| Refresh Server Data       | `GET /servers/{slug}`                          | Syncs IP, status, name to WHMCS       |
+| Reinstall Server          | `POST /actions/reinstall`                      | Uses configured image slug            |
+| Create Snapshot           | `POST /servers/{slug}/snapshots`               |                                       |
+| List Snapshots            | `GET /servers/{slug}/snapshots`                | Logged to Module Log                  |
+| Restore Snapshot          | `POST /servers/{slug}/snapshots/{id}/restore`  |                                       |
+| Delete Snapshot           | `DELETE /servers/{slug}/snapshots/{id}`        |                                       |
+| Create Shell User         | `POST /servers/{slug}/shellusers`              |                                       |
+| Delete Shell User         | `DELETE /servers/{slug}/shellusers/{username}` |                                       |
+| List Shell Users          | `GET /servers/{slug}/shellusers`               | Logged to Module Log                  |
+| Run Certbot               | Webdock action                                 |                                       |
+| Set SSH Settings          | Webdock action                                 |                                       |
+| Set Server Settings       | Webdock action                                 |                                       |
+| Dry Run Profile Change    | `GET` profile diff check                       | Non-destructive                       |
+| Change Server Profile     | `POST` profile change                          | Destructive — confirm before use      |
+| Emergency Suspend (Abuse) | Stop + abuse email notification                | Sends alert to configured abuse email |
+
+---
+
+## Server Provisioning Logic
+
+### Field Resolution Priority
+
+At order time, the module resolves `locationId`, `profileSlug`, and `imageSlug` using this cascading priority:
+
+```
+1. Service Custom Fields   (set by admin or frontend before ordering)
+2. Configurable Options    (customer selections at checkout)
+3. Module Settings         (configoption2 / configoption3 / configoption4)
+4. Built-in defaults       (dk / cloud.2 / webdock-ubuntu-jammy-cloud)
+```
+
+### Custom Profile Creation
+
+If `Custom Platform` is provided (or all hardware specs are set and platform is defaulted to `intel_vps`), the module:
+
+1. Calls `POST /profiles` with `{ platform, cpu_threads, ram, disk_space, network_bandwidth }`
+2. Uses the returned profile slug for server creation
+3. Aborts provisioning with a clear error if any required field is missing
+
+**Supported platform values** (all case-insensitive):
+
+| Platform API Value | Accepted Aliases                                  |
+| ------------------ | ------------------------------------------------- |
+| `intel_vps`        | `intel_vps`, `intel`, `intel vps`                 |
+| `epyc_vps`         | `epyc_vps`, `epyc`, `amd`, `amd epyc`, `amd_epyc` |
+
+### Image Slug Resolution
+
+Admins and clients may specify human-readable OS names instead of raw API slugs.  
+The module resolves them automatically (case-insensitive):
+
+| Human Name                              | Resolved Slug                   |
+| --------------------------------------- | ------------------------------- |
+| `ubuntu noble`, `noble`, `ubuntu 24.04` | `webdock-ubuntu-noble-cloud`    |
+| `ubuntu jammy`, `jammy`, `ubuntu 22.04` | `webdock-ubuntu-jammy-cloud`    |
+| `almalinux 10`, `alma 10`               | `webdock-almalinux-10-cloud`    |
+| `almalinux 9`, `alma 9`                 | `webdock-almalinux-9-cloud`     |
+| `centos 10`                             | `webdock-centos-10-cloud`       |
+| `centos 9`                              | `webdock-centos-9-cloud`        |
+| `debian trixie`, `debian 13`            | `webdock-debian-trixie-cloud`   |
+| `debian bookworm`, `debian 12`          | `webdock-debian-bookworm-cloud` |
+| `noble lemp`, `lemp`                    | `krellide:webdock-noble-lemp`   |
+| `noble lamp`, `lamp`                    | `krellide:webdock-noble-lamp`   |
+
+Unrecognised values are passed through unchanged (assumed to already be a valid slug).
+
+### Double-Provision Guard
+
+If `VPS Slug` is already populated in the custom fields when `CreateAccount` runs,  
+provisioning is immediately skipped and `success` is returned.  
+This prevents duplicate servers when WHMCS retries or an admin re-triggers the action.
+
+### Profile–Location Validation
+
+Before provisioning, the module queries `GET /profiles?locationId={locationId}` and  
+verifies the selected profile is available in the chosen location. If not, it switches  
+to the closest available profile and logs the change.
+
+---
+
+## Troubleshooting
+
+### View Module Logs
+
+1. **Utilities → Logs → Module Log**
+2. Filter by module name `webdock`
+
+Every API call, parameter resolution, and lifecycle event is logged with request body,  
+response body, and sensitive values (API token) redacted automatically.
+
+### Common Issues
+
+| Symptom                                                         | Cause                                                      | Fix                                                                                                                                                            |
+| --------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Provisioning aborted: "Custom Platform" is set…`               | Custom Platform is set but hardware fields are incomplete. | Set all 5 fields: Custom Platform, CPU Threads, RAM (GB), Disk Space (GB), Network Bandwidth (Gbit/s). Or clear Custom Platform to use a Profile Slug instead. |
+| `Termination failed: …does not have server deletion privileges` | Webdock reseller token lacks DELETE permission.            | Contact Webdock support to enable deletion for your account. Delete the server manually in the Webdock dashboard.                                              |
+| `Cannot suspend — VPS slug missing from service domain field`   | Service domain was not written at creation time.           | Edit the service and set the Domain field to the server slug (visible in the Webdock dashboard).                                                               |
+| `Webdock returned success but no slug in response body`         | API response was unexpected.                               | Check Webdock dashboard — server may have been created. File a Webdock support ticket if not.                                                                  |
+| Client area shows "Server is being provisioned"                 | Provisioning is still running (async).                     | Wait 2–5 minutes and refresh. Provisioning status updates when the page is loaded.                                                                             |
+| Selected profile is not valid (400 from Webdock)                | Chosen profile unavailable in selected location.           | The module auto-resolves this; if the error persists, check `GET /locations` and `GET /profiles?locationId=X` and update your defaults.                        |
+
+### Testing Without Billing
+
+Use **Admin → {your test client} → Products/Services → {Service} → Module Commands**  
+to manually trigger Create / Suspend / Unsuspend / Terminate and review the Module Log immediately after.
+
+---
+
+## Security Notes
+
+- The Webdock API token is stored in the WHMCS database as a password field (masked in the UI).
+- All sensitive parameters (API token) are stripped from Module Log entries automatically.
+- Client-area custom action inputs (`reinstallImage`, `snapshotId`, `newShellUsername`, `newShellPassword`) are validated and sanitised before being passed to Webdock API calls.
+- Shell passwords are shown **once only** in the success message and never stored by WHMCS.
+- The `root` username is explicitly blocked in the shell user creation form and validated server-side.
+- All template output uses Smarty's `escape:'html'` modifier to prevent XSS.
+- Direct PHP file access is blocked via `if (!defined('WHMCS')) { die(…); }`.
+
+---
+
+## Changelog
+
+### 1.1 — Current
+
+- Added shell user management (create, list, delete) in client area and admin panel
+- Added server profile change: dry-run and live change admin actions
+- Added Certbot and SSH/server settings admin actions
+- Added Emergency Abuse Suspend admin action with configurable notification email
+- Added real-time snapshot status normalisation (boolean-to-string casting, type alias mapping)
+- Added profile–location validation with auto-resolution before provisioning
+- Added image slug resolver supporting human-readable OS names
+- Added double-provision guard (checks `VPS Slug` field before creating)
+- Improved field resolution: custom fields → configurable options → module settings → built-in defaults
+- Added Custom Platform auto-default to `intel_vps` when all hardware specs are present
+- Improved module log redaction (API token stripped from all log entries)
+- Tab panel works with Bootstrap 3, 4, and 5 via JS shim
+- Production hardening: input validation, error surface improvements, 401/403 termination guidance
+
+### 1.0
+
+- Initial release: CreateAccount, SuspendAccount, UnsuspendAccount, TerminateAccount
+- Basic client area with power actions (Start, Stop, Reboot)
+- Snapshot tab (Create, Restore, Delete)
+
+---
+
+## Support
+
+For issues with this WHMCS module, open an issue in the module repository.  
+For Webdock API questions, refer to [https://api.webdock.io/v1](https://api.webdock.io/v1) or contact [Webdock support](https://webdock.io) or [Author](https://github.com/Colorado4Sure).
