@@ -33,11 +33,12 @@
 
 ## Overview
 
-The **Webdock VPS** module for WHMCS automates the full lifecycle of Webdock VPS servers directly from your WHMCS billing panel.
+The **Webdock VPS** module for WHMCS automates the full lifecycle of Webdock VPS servers
+directly from your WHMCS billing panel.
 
 **What it does:**
 
-| WHMCS Event                  | Webdock Action                                  |
+| WHMCS Event                 | Webdock Action                                  |
 | ---------------------------- | ----------------------------------------------- |
 | Order paid / Create Account  | `POST /servers` — Provision new VPS             |
 | Invoice overdue / Suspend    | `POST /servers/{slug}/actions/stop` — Power off |
@@ -65,7 +66,7 @@ The **Webdock VPS** module for WHMCS automates the full lifecycle of Webdock VPS
 
 ## Requirements
 
-| Requirement              | Detail                                                            |
+| Requirement              | Detail                                                     |
 | ------------------------ | ----------------------------------------------------------------- |
 | WHMCS                    | 8.0 or later                                                      |
 | PHP                      | 7.4 or later (8.x recommended)                                    |
@@ -140,24 +141,24 @@ Custom fields are defined per product under **Products/Services → {Product} �
 
 These fields are populated automatically by the module at provisioning time and are also used as the _primary_ input source when an order is placed.
 
-| Field Name                   | Type | Required | Description                                                                     |
-| ---------------------------- | ---- | -------- | ------------------------------------------------------------------------------- |
-| `VPS Slug`                   | Text | Yes      | Webdock server slug — set automatically at creation. Do not edit.               |
+| Field Name                   | Type | Required | Description                                                                    |
+| ---------------------------- | ---- | -------- | ------------------------------------------------------------------------------ |
+| `VPS Slug`                   | Text | Yes      | Webdock server slug — set automatically at creation. Do not edit.              |
 | `Server Name`                | Text | No       | Human-readable server name. Falls back to service hostname then auto-generated. |
-| `Location ID`                | Text | No       | Overrides the module default. E.g. `dk`, `fi`, `us`.                            |
-| `Profile Slug`               | Text | No       | Hardware profile slug. E.g. `cloud.2`.                                          |
-| `Image Slug`                 | Text | No       | OS image slug or human name. E.g. `Ubuntu Jammy 22.04`.                         |
-| `Images`                     | Text | No       | Alias for Image Slug — accepted by resolution logic.                            |
-| `Operating System`           | Text | No       | Alias for Image Slug.                                                           |
-| `Custom Platform`            | Text | No       | `intel_vps` or `epyc_vps`. Triggers custom profile creation when set.           |
-| `CPU Threads`                | Text | No       | Required when Custom Platform is set. Integer.                                  |
-| `RAM (GB)`                   | Text | No       | Required when Custom Platform is set. Integer.                                  |
-| `Disk Space (GB)`            | Text | No       | Required when Custom Platform is set. Integer.                                  |
-| `Network Bandwidth (Gbit/s)` | Text | No       | Required when Custom Platform is set. Integer.                                  |
-| `Provisioned Server Name`    | Text | No       | Set by the module post-creation. Read-only.                                     |
-| `Provisioned Profile Slug`   | Text | No       | Set by the module post-creation. Read-only.                                     |
-| `Provisioned Image Slug`     | Text | No       | Set by the module post-creation. Read-only.                                     |
-| `Provisioned Location ID`    | Text | No       | Set by the module post-creation. Read-only.                                     |
+| `Location ID`                | Text | No       | Overrides the module default. See available locations: <https://api.webdock.io/v1/locations> |
+| `Profile Slug`               | Text | No       | Hardware profile slug. See available profiles: <https://api.webdock.io/v1/profiles?locationId=dk> |
+| `Image Slug`                 | Text | No       | OS image slug or human name. See available images: <https://api.webdock.io/v1/images> |
+| `Images`                     | Text | No       | Alias for Image Slug — accepted by resolution logic.                           |
+| `Operating System`           | Text | No       | Alias for Image Slug.                                                          |
+| `Custom Platform`            | Text | No       | Platform slug. See available platforms: <https://api.webdock.io/v1/platforms>  |
+| `CPU Threads`                | Text | No       | Required when Custom Platform is set. Integer.                                 |
+| `RAM (GB)`                   | Text | No       | Required when Custom Platform is set. Integer.                                 |
+| `Disk Space (GB)`            | Text | No       | Required when Custom Platform is set. Integer.                                 |
+| `Network Bandwidth (Gbit/s)` | Text | No       | Required when Custom Platform is set. Integer.                                 |
+| `Provisioned Server Name`    | Text | No       | Set by the module post-creation. Read-only.                                    |
+| `Provisioned Profile Slug`   | Text | No       | Set by the module post-creation. Read-only.                                    |
+| `Provisioned Image Slug`     | Text | No       | Set by the module post-creation. Read-only.                                    |
+| `Provisioned Location ID`    | Text | No       | Set by the module post-creation. Read-only.                                    |
 
 > **Visibility:** Set `VPS Slug` as **Client can view: Yes / Client can edit: No**. Provisioned fields should be admin-only.
 
@@ -171,16 +172,16 @@ Create a Configurable Options Group under
 **Setup → Products/Services → Configurable Options → Create New Group**,  
 then link it to your product.
 
-| Option Name                                  | Accepted Values         | Effect                          |
-| -------------------------------------------- | ----------------------- | ------------------------------- |
-| `Location ID`                                | `dk`, `fi`, `us`, …     | Overrides default location      |
-| `Profile Slug`                               | `cloud.2`, `cloud.4`, … | Overrides default profile       |
-| `Image Slug` / `Images` / `Operating System` | Slug or human name      | Overrides default OS image      |
-| `Custom Platform` / `Platform`               | `intel_vps`, `epyc_vps` | Enables custom profile creation |
-| `CPU Threads` / `CPU` / `vCPU`               | Integer                 | Custom profile CPU threads      |
-| `RAM (GB)` / `RAM` / `Memory`                | Integer                 | Custom profile RAM              |
-| `Disk Space (GB)` / `Disk` / `Storage`       | Integer                 | Custom profile disk             |
-| `Network Bandwidth (Gbit/s)` / `Bandwidth`   | Integer                 | Custom profile network          |
+| Option Name                                  | Accepted Values                                                          | Effect                          |
+| -------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
+| `Location ID`                                | Any location ID from <https://api.webdock.io/v1/locations>               | Overrides default location      |
+| `Profile Slug`                               | Any profile slug from <https://api.webdock.io/v1/profiles?locationId=dk> | Overrides default profile       |
+| `Image Slug` / `Images` / `Operating System` | Any image slug or human name from <https://api.webdock.io/v1/images>     | Overrides default OS image      |
+| `Custom Platform` / `Platform`               | Any platform slug from <https://api.webdock.io/v1/platforms>             | Enables custom profile creation |
+| `CPU Threads` / `CPU` / `vCPU`               | Integer                                                                  | Custom profile CPU threads      |
+| `RAM (GB)` / `RAM` / `Memory`                | Integer                                                                  | Custom profile RAM              |
+| `Disk Space (GB)` / `Disk` / `Storage`       | Integer                                                                  | Custom profile disk             |
+| `Network Bandwidth (Gbit/s)` / `Bandwidth`   | Integer                                                                  | Custom profile network          |
 
 All option name matching is **case-insensitive** and alias-aware — the module recognises multiple common spellings for each field.
 
@@ -191,13 +192,13 @@ All option name matching is **case-insensitive** and alias-aware — the module 
 These fields appear in the WHMCS admin under  
 **Products/Services → {Product} → Module Settings**.
 
-| Setting (configoption) | Friendly Name          | Description                                                                              |
-| ---------------------- | ---------------------- | ---------------------------------------------------------------------------------------- |
-| `configoption1`        | Webdock API Token      | Your Webdock reseller API token. Stored as password field.                               |
-| `configoption2`        | Location ID (default)  | Fallback location if none specified in custom fields or configurable options. E.g. `dk`. |
-| `configoption3`        | Profile Slug (default) | Fallback hardware profile. E.g. `cloud.2`.                                               |
-| `configoption4`        | Images (default)       | Fallback OS image slug or human-readable name. E.g. `Ubuntu Jammy 22.04`.                |
-| `configoption5`        | Abuse Notify Email     | Internal email for abuse suspension alerts (optional).                                   |
+| Setting (configoption) | Friendly Name          | Description                                                                                                                           |
+| ---------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `configoption1`        | Webdock API Token      | Your Webdock reseller API token. Stored as password field.                                                                            |
+| `configoption2`        | Location ID (default)  | Fallback location if none specified in custom fields or configurable options. See <https://api.webdock.io/v1/locations> for valid IDs. |
+| `configoption3`        | Profile Slug (default) | Fallback hardware profile. See <https://api.webdock.io/v1/profiles?locationId=dk> for available slugs.                                |
+| `configoption4`        | Images (default)       | Fallback OS image slug or human-readable name. See <https://api.webdock.io/v1/images> for available slugs.                            |
+| `configoption5`        | Abuse Notify Email     | Internal email for abuse suspension alerts (optional).                                                                                |
 
 **Priority order for each field:**
 
@@ -265,22 +266,8 @@ When a service is **Active**, the client sees a tabbed panel with:
 - Power action buttons: **Start**, **Stop**, **Reboot**
 - **Reinstall** panel (Danger Zone): client selects an OS image from a dropdown and confirms twice before triggering reinstall
 
-Available OS images for reinstall:
-
-| Label                     | Slug                                     |
-| ------------------------- | ---------------------------------------- |
-| Ubuntu Noble 24.04        | `webdock-ubuntu-noble-cloud`             |
-| Ubuntu Jammy 22.04        | `webdock-ubuntu-jammy-cloud`             |
-| AlmaLinux 10              | `webdock-almalinux-10-cloud`             |
-| AlmaLinux 9               | `webdock-almalinux-9-cloud`              |
-| CentOS 10                 | `webdock-centos-10-cloud`                |
-| CentOS 9                  | `webdock-centos-9-cloud`                 |
-| Debian 13 Trixie          | `webdock-debian-trixie-cloud`            |
-| Debian 12 Bookworm        | `webdock-debian-bookworm-cloud`          |
-| Ubuntu GNOME Desktop      | `webdock-ubuntu-noble-gnome-desktop`     |
-| Ubuntu KDE Plasma Desktop | `webdock-ubuntu-noble-kdeplasma-desktop` |
-| Noble LEMP Stack          | `krellide:webdock-noble-lemp`            |
-| Noble LAMP Stack          | `krellide:webdock-noble-lamp`            |
+The current list of available OS images for reinstall is always up to date at:  
+<https://api.webdock.io/v1/images>
 
 ### Snapshots Tab
 
@@ -344,7 +331,7 @@ If `Custom Platform` is provided (or all hardware specs are set and platform is 
 2. Uses the returned profile slug for server creation
 3. Aborts provisioning with a clear error if any required field is missing
 
-**Supported platform values** (all case-insensitive):
+**Supported platform values** (all case-insensitive) — see <https://api.webdock.io/v1/platforms> for the full and current list:
 
 | Platform API Value | Accepted Aliases                                  |
 | ------------------ | ------------------------------------------------- |
@@ -354,20 +341,10 @@ If `Custom Platform` is provided (or all hardware specs are set and platform is 
 ### Image Slug Resolution
 
 Admins and clients may specify human-readable OS names instead of raw API slugs.  
-The module resolves them automatically (case-insensitive):
+The module resolves them automatically (case-insensitive).
 
-| Human Name                              | Resolved Slug                   |
-| --------------------------------------- | ------------------------------- |
-| `ubuntu noble`, `noble`, `ubuntu 24.04` | `webdock-ubuntu-noble-cloud`    |
-| `ubuntu jammy`, `jammy`, `ubuntu 22.04` | `webdock-ubuntu-jammy-cloud`    |
-| `almalinux 10`, `alma 10`               | `webdock-almalinux-10-cloud`    |
-| `almalinux 9`, `alma 9`                 | `webdock-almalinux-9-cloud`     |
-| `centos 10`                             | `webdock-centos-10-cloud`       |
-| `centos 9`                              | `webdock-centos-9-cloud`        |
-| `debian trixie`, `debian 13`            | `webdock-debian-trixie-cloud`   |
-| `debian bookworm`, `debian 12`          | `webdock-debian-bookworm-cloud` |
-| `noble lemp`, `lemp`                    | `krellide:webdock-noble-lemp`   |
-| `noble lamp`, `lamp`                    | `krellide:webdock-noble-lamp`   |
+For the full and up-to-date list of available image slugs and their names, check:  
+<https://api.webdock.io/v1/images>
 
 Unrecognised values are passed through unchanged (assumed to already be a valid slug).
 
@@ -397,14 +374,14 @@ response body, and sensitive values (API token) redacted automatically.
 
 ### Common Issues
 
-| Symptom                                                         | Cause                                                      | Fix                                                                                                                                                            |
-| --------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Provisioning aborted: "Custom Platform" is set…`               | Custom Platform is set but hardware fields are incomplete. | Set all 5 fields: Custom Platform, CPU Threads, RAM (GB), Disk Space (GB), Network Bandwidth (Gbit/s). Or clear Custom Platform to use a Profile Slug instead. |
-| `Termination failed: …does not have server deletion privileges` | Webdock reseller token lacks DELETE permission.            | Contact Webdock support to enable deletion for your account. Delete the server manually in the Webdock dashboard.                                              |
-| `Cannot suspend — VPS slug missing from service domain field`   | Service domain was not written at creation time.           | Edit the service and set the Domain field to the server slug (visible in the Webdock dashboard).                                                               |
-| `Webdock returned success but no slug in response body`         | API response was unexpected.                               | Check Webdock dashboard — server may have been created. File a Webdock support ticket if not.                                                                  |
-| Client area shows "Server is being provisioned"                 | Provisioning is still running (async).                     | Wait 2–5 minutes and refresh. Provisioning status updates when the page is loaded.                                                                             |
-| Selected profile is not valid (400 from Webdock)                | Chosen profile unavailable in selected location.           | The module auto-resolves this; if the error persists, check `GET /locations` and `GET /profiles?locationId=X` and update your defaults.                        |
+| Symptom                                                         | Cause                                                      | Fix                                                                                                                                                                        |
+| --------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Provisioning aborted: "Custom Platform" is set…`               | Custom Platform is set but hardware fields are incomplete. | Set all 5 fields: Custom Platform, CPU Threads, RAM (GB), Disk Space (GB), Network Bandwidth (Gbit/s). Or clear Custom Platform to use a Profile Slug instead.             |
+| `Termination failed: …does not have server deletion privileges` | Webdock reseller token lacks DELETE permission.            | Contact Webdock support to enable deletion for your account. Delete the server manually in the Webdock dashboard.                                                           |
+| `Cannot suspend — VPS slug missing from service domain field`   | Service domain was not written at creation time.           | Edit the service and set the Domain field to the server slug (visible in the Webdock dashboard).                                                                            |
+| `Webdock returned success but no slug in response body`         | API response was unexpected.                               | Check Webdock dashboard — server may have been created. File a Webdock support ticket if not.                                                                              |
+| Client area shows "Server is being provisioned"                 | Provisioning is still running (async).                     | Wait 2–5 minutes and refresh. Provisioning status updates when the page is loaded.                                                                                         |
+| Selected profile is not valid (400 from Webdock)                | Chosen profile unavailable in selected location.           | The module auto-resolves this; if the error persists, check [available locations](https://api.webdock.io/v1/locations) and [profiles](https://api.webdock.io/v1/profiles?locationId=dk) and update your defaults. |
 
 ### Testing Without Billing
 
@@ -454,4 +431,4 @@ to manually trigger Create / Suspend / Unsuspend / Terminate and review the Modu
 ## Support
 
 For issues with this WHMCS module, open an issue in the module repository.  
-For Webdock API questions, refer to [https://api.webdock.io/v1](https://api.webdock.io/v1) or contact [Webdock support](https://webdock.io) or [Author](https://github.com/Colorado4Sure).
+For Webdock API questions, refer to <https://api.webdock.io/v1> or contact [Webdock support](https://webdock.io) or [Author](https://github.com/Colorado4Sure).
