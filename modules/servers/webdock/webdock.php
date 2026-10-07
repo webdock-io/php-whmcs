@@ -118,6 +118,12 @@ function webdock_ConfigOptions()
             'Default'      => '',
             'Description'  => 'Internal email address for abuse suspension alerts (optional)',
         ],
+        // configoption6
+        'debug_mode' => [
+            'FriendlyName' => 'Debug Logging',
+            'Type'         => 'yesno',
+            'Description'  => 'Log verbose diagnostics to Utilities → Logs → Module Log (secrets are redacted). Disable in production.',
+        ],
     ];
 }
 
@@ -135,24 +141,15 @@ function webdock_ConfigOptions()
 function webdock_CreateAccount(array $params)
 {
 
-    // TEMP DEBUG — remove after diagnosis
-    logModuleCall(
-        'webdock',
-        'CreateAccount:PARAMS-DEBUG',
-        [
-            'customfields'  => $params['customfields'] ?? 'NOT SET',
-            'configoptions' => $params['configoptions'] ?? 'NOT SET',
-            'domain'        => $params['domain'] ?? '',
-            'hostname'      => $params['hostname'] ?? '',
-            'configoption1' => '(hidden)',
-            'configoption2' => $params['configoption2'] ?? '',
-            'configoption3' => $params['configoption3'] ?? '',
-            'configoption4' => $params['configoption4'] ?? '',
-        ],
-        'Raw params dump for field resolution diagnosis',
-        'debug',
-        [$params['configoption1'] ?? '']
-    );
+    webdock_debug_log($params, 'CreateAccount:params', [
+        'customfields'  => webdock_redact_sensitive($params['customfields'] ?? []),
+        'configoptions' => $params['configoptions'] ?? [],
+        'domain'        => $params['domain'] ?? '',
+        'hostname'      => $params['hostname'] ?? '',
+        'configoption2' => $params['configoption2'] ?? '',
+        'configoption3' => $params['configoption3'] ?? '',
+        'configoption4' => $params['configoption4'] ?? '',
+    ]);
 
     $apiToken = $params['configoption1'];
 
@@ -711,7 +708,70 @@ function webdock_TerminateAccount(array $params)
     return webdock_stringify_error_detail($result['message'] ?? ('Webdock delete error ' . $result['status']));
 }
 
-// ---------------------------------------------------------------------------
+/**
+ * Apply a product/service upgrade or downgrade by resizing the VPS profile.
+ *
+ * Called by WHMCS on product changes and configurable-option upgrades.
+ * Runs a Webdock resize dry run first so an invalid change is rejected
+ * before anything is billed or modified.
+ *
+ * @param array $params WHMCS module parameters
+ *
+ * @return string 'success' on success, otherwise an error message string
+ */
+function webdock_ChangePackage(array $params)
+{
+    $apiToken = (string) ($params['configoption1'] ?? '');
+    if ($apiToken === '') {
+        return 'Change Package failed: Webdock API token is not configured on the product.';
+    }
+
+    $slug = trim((string) ($params['domain'] ?? ''));
+    if ($slug === '') {
+        $slug = webdock_get_customfield_value($params, ['VPS Slug', 'Provisioned Server Name']);
+    }
+    if ($slug === '') {
+        return 'Change Package failed: VPS slug missing from service domain field.';
+    }
+    $params['domain'] = $slug;
+
+    $targetProfile = webdock_resolve_target_profile_slug($params);
+    if ($targetProfile === '') {
+        return webdock_no_target_profile_message('Change Package');
+    }
+
+    $current = webdock_webdock_request('GET', '/servers/' . rawurlencode($slug), $apiToken);
+    $currentProfile = ($current['ok'] && is_array($current['body'])) ? trim((string) ($current['body']['profile'] ?? '')) : '';
+
+    webdock_debug_log($params, 'ChangePackage:resolved', [
+        'slug'           => $slug,
+        'currentProfile' => $currentProfile,
+        'targetProfile'  => $targetProfile,
+        'serverFetchOk'  => $current['ok'],
+    ]);
+
+    if ($currentProfile !== '' && $currentProfile === $targetProfile) {
+        return 'success';
+    }
+
+    $dryRun = webdock_run_server_post_action($params, '/actions/resize/dryrun', ['profileSlug' => $targetProfile], 'ChangePackage:dryrun');
+    if ($dryRun !== 'success') {
+        return 'Change Package dry run rejected: ' . $dryRun;
+    }
+
+    $result = webdock_run_server_post_action($params, '/actions/resize', ['profileSlug' => $targetProfile], 'ChangePackage');
+    if ($result !== 'success') {
+        return $result;
+    }
+
+    webdock_update_service_customfields($params, [
+        'Profile Slug'             => $targetProfile,
+        'Provisioned Profile Slug' => $targetProfile,
+    ]);
+
+    return 'success';
+}
+
 // ---------------------------------------------------------------------------
 // Client area
 // ---------------------------------------------------------------------------
@@ -1031,6 +1091,7 @@ function webdock_AdminCustomButtonArray()
         'Reboot Server'               => 'RebootServer',
         'Archive Server'              => 'ArchiveServer',
         'Refresh Server Data'         => 'RefreshServerData',
+        'Run Diagnostics'             => 'RunDiagnostics',
         'Reinstall Server'            => 'ReinstallServer',
         'Create Snapshot'             => 'CreateSnapshot',
         'List Snapshots'              => 'ListSnapshots',
@@ -1604,28 +1665,9 @@ function webdock_SetServerSettings(array $params)
  */
 function webdock_ProfileChangeDryRun(array $params)
 {
-    // Step 1: attempt to create/resolve a custom profile from hardware specs.
-    $resolved = webdock_resolve_or_create_custom_profile_from_selection($params);
-    if ($resolved['ok'] && !empty($resolved['slug'])) {
-        $targetProfile = $resolved['slug'];
-    } else {
-        // Step 2: explicit target profile slug custom field.
-        $targetProfile = trim(webdock_get_customfield_value($params, ['Target Profile Slug', 'Resize Profile Slug']));
-    }
-
-    // Step 3: configurable option or module default.
+    $targetProfile = webdock_resolve_target_profile_slug($params);
     if ($targetProfile === '') {
-        $targetProfile = trim(webdock_get_configoption_value($params, ['Profile Slug']));
-    }
-    if ($targetProfile === '') {
-        $targetProfile = trim((string) ($params['configoption3'] ?? ''));
-    }
-
-    if ($targetProfile === '') {
-        return 'Dry Run Profile Change: no target profile could be resolved. '
-            . 'To auto-create a custom profile set all five custom fields: '
-            . '"Custom Platform" (intel_vps or epyc_vps), "CPU Threads", "RAM (GB)", "Disk Space (GB)", "Network Bandwidth (Gbit/s)". '
-            . 'Alternatively set a "Target Profile Slug" custom field with the desired profile slug.';
+        return webdock_no_target_profile_message('Dry Run Profile Change');
     }
 
     return webdock_run_server_action(
@@ -1648,28 +1690,9 @@ function webdock_ProfileChangeDryRun(array $params)
  */
 function webdock_ChangeServerProfile(array $params)
 {
-    // Step 1: attempt to create/resolve a custom profile from hardware specs.
-    $resolved = webdock_resolve_or_create_custom_profile_from_selection($params);
-    if ($resolved['ok'] && !empty($resolved['slug'])) {
-        $targetProfile = $resolved['slug'];
-    } else {
-        // Step 2: explicit target profile slug custom field.
-        $targetProfile = trim(webdock_get_customfield_value($params, ['Target Profile Slug', 'Resize Profile Slug']));
-    }
-
-    // Step 3: configurable option or module default.
+    $targetProfile = webdock_resolve_target_profile_slug($params);
     if ($targetProfile === '') {
-        $targetProfile = trim(webdock_get_configoption_value($params, ['Profile Slug']));
-    }
-    if ($targetProfile === '') {
-        $targetProfile = trim((string) ($params['configoption3'] ?? ''));
-    }
-
-    if ($targetProfile === '') {
-        return 'Change Server Profile: no target profile could be resolved. '
-            . 'To auto-create a custom profile set all five custom fields: '
-            . '"Custom Platform" (intel_vps or epyc_vps), "CPU Threads", "RAM (GB)", "Disk Space (GB)", "Network Bandwidth (Gbit/s)". '
-            . 'Alternatively set a "Target Profile Slug" custom field with the desired profile slug.';
+        return webdock_no_target_profile_message('Change Server Profile');
     }
 
     // After a successful profile change, update service custom fields to
@@ -1763,6 +1786,156 @@ function webdock_EmergencyAbuseSuspend(array $params)
     }
 
     return 'success';
+}
+
+/**
+ * Resolve the profile slug a resize should target.
+ *
+ * Order: custom profile built from hardware selection, "Target Profile Slug"
+ * custom field, "Profile Slug" configurable option, module default.
+ */
+function webdock_resolve_target_profile_slug(array $params): string
+{
+    $resolved = webdock_resolve_or_create_custom_profile_from_selection($params);
+    if ($resolved['ok'] && !empty($resolved['slug'])) {
+        return $resolved['slug'];
+    }
+
+    $target = trim(webdock_get_customfield_value($params, ['Target Profile Slug', 'Resize Profile Slug']));
+    if ($target === '') {
+        $target = trim(webdock_get_configoption_value($params, ['Profile Slug']));
+    }
+    if ($target === '') {
+        $target = trim((string) ($params['configoption3'] ?? ''));
+    }
+
+    return $target;
+}
+
+function webdock_no_target_profile_message(string $action): string
+{
+    return $action . ': no target profile could be resolved. '
+        . 'To auto-create a custom profile set all five fields: '
+        . '"Custom Platform" (intel_vps or epyc_vps), "CPU Threads", "RAM (GB)", "Disk Space (GB)", "Network Bandwidth (Gbit/s)". '
+        . 'Alternatively set a "Target Profile Slug" custom field, a "Profile Slug" configurable option, or the product default Profile Slug.';
+}
+
+/**
+ * Whether the product's Debug Logging option is enabled.
+ */
+function webdock_debug_enabled(array $params): bool
+{
+    return webdock_parse_bool_value($params['configoption6'] ?? '', false);
+}
+
+/**
+ * Write a Module Log entry only when Debug Logging is enabled.
+ */
+function webdock_debug_log(array $params, string $action, array $data): void
+{
+    if (!webdock_debug_enabled($params)) {
+        return;
+    }
+
+    logModuleCall(
+        'webdock',
+        'DEBUG:' . $action,
+        ['service_id' => $params['serviceid'] ?? null],
+        $data,
+        'debug',
+        [$params['configoption1'] ?? '']
+    );
+}
+
+/**
+ * Mask values whose key looks like a credential.
+ */
+function webdock_redact_sensitive($data)
+{
+    if (!is_array($data)) {
+        return $data;
+    }
+
+    foreach ($data as $key => $value) {
+        if (is_string($key) && preg_match('/pass|secret|token|key/i', $key)) {
+            $data[$key] = '(redacted)';
+        } elseif (is_array($value)) {
+            $data[$key] = webdock_redact_sensitive($value);
+        }
+    }
+
+    return $data;
+}
+
+/**
+ * Admin diagnostics: verifies token, slug, live server state and target
+ * profile validity without changing anything. Details go to the Module Log.
+ */
+function webdock_RunDiagnostics(array $params)
+{
+    $apiToken = (string) ($params['configoption1'] ?? '');
+    $slug     = trim((string) ($params['domain'] ?? ''));
+    $checks   = [
+        'php_version'     => PHP_VERSION,
+        'curl_available'  => function_exists('curl_init'),
+        'token_set'       => $apiToken !== '',
+        'slug'            => $slug,
+        'service_status'  => $params['status'] ?? '',
+        'debug_enabled'   => webdock_debug_enabled($params),
+    ];
+
+    if ($apiToken === '') {
+        logModuleCall('webdock', 'RunDiagnostics', [], $checks, 'token missing', []);
+        return 'Diagnostics failed: Webdock API token is not configured.';
+    }
+
+    $account = webdock_webdock_request('GET', '/account/accountInformation', $apiToken);
+    $checks['api_auth'] = ['ok' => $account['ok'], 'status' => $account['status']];
+
+    $profiles = webdock_webdock_request('GET', '/profiles', $apiToken);
+    $available = [];
+    if ($profiles['ok'] && is_array($profiles['body'])) {
+        foreach ($profiles['body'] as $profile) {
+            if (is_array($profile) && !empty($profile['slug'])) {
+                $available[] = (string) $profile['slug'];
+            }
+        }
+    }
+    $checks['profiles_available'] = count($available);
+
+    $target = trim(webdock_get_customfield_value($params, ['Target Profile Slug', 'Resize Profile Slug']));
+    if ($target === '') {
+        $target = trim(webdock_get_configoption_value($params, ['Profile Slug']));
+    }
+    if ($target === '') {
+        $target = trim((string) ($params['configoption3'] ?? ''));
+    }
+    $checks['target_profile']       = $target;
+    $checks['target_profile_valid'] = $target === '' ? null : in_array($target, $available, true);
+
+    $error = '';
+    if ($slug === '') {
+        $error = 'VPS slug missing from service domain field.';
+    } else {
+        $server = webdock_webdock_request('GET', '/servers/' . rawurlencode($slug), $apiToken);
+        $checks['server'] = [
+            'ok'      => $server['ok'],
+            'status'  => $server['status'],
+            'state'   => $server['ok'] && is_array($server['body']) ? ($server['body']['status'] ?? '') : '',
+            'profile' => $server['ok'] && is_array($server['body']) ? ($server['body']['profile'] ?? '') : '',
+        ];
+        if (!$server['ok']) {
+            $error = webdock_stringify_error_detail($server['message'] ?? 'Server lookup failed.');
+        }
+    }
+
+    if (!$account['ok']) {
+        $error = webdock_stringify_error_detail($account['message'] ?? 'API authentication failed.');
+    }
+
+    logModuleCall('webdock', 'RunDiagnostics', ['service_id' => $params['serviceid'] ?? null], $checks, $error === '' ? 'ok' : $error, [$apiToken]);
+
+    return $error === '' ? 'success' : 'Diagnostics failed: ' . $error . ' See Module Log for details.';
 }
 
 /**
